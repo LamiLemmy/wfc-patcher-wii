@@ -1,5 +1,5 @@
-#include "wwfcMii.hpp"
-#include "import/mkwNet.hpp"
+#include "import/mkwNetUserHandler.hpp"
+#include "wwfcGPReport.hpp"
 #include "wwfcPatch.hpp"
 
 namespace wwfc::Mii
@@ -7,7 +7,8 @@ namespace wwfc::Mii
 
 #if RMC
 
-void ClearUSERMiiInfo(mkw::Net::USERPacket* packet) asm("ClearUSERMiiInfo");
+void ClearUserMiiInfo(mkw::Net::UserHandler::Packet* packet
+) asm("ClearUserMiiInfo");
 
 WWFC_DEFINE_PATCH = {Patch::CallWithCTR(
     WWFC_PATCH_LEVEL_FEATURE, //
@@ -16,7 +17,7 @@ WWFC_DEFINE_PATCH = {Patch::CallWithCTR(
         // clang-format off
         mflr    r30;
         addi    r3, r31, 0x8;
-        bl      ClearUSERMiiInfo;
+        bl      ClearUserMiiInfo;
         mtlr    r30;
         // Function epilogue
         lwz     r31, 0x1C(sp);
@@ -76,7 +77,7 @@ static void ClearMiiInfo(RFLiStoreData* miiData)
     miiData->checksum = RFLiCalculateCRC(miiData, sizeof(RFLiStoreData));
 }
 
-void ClearUSERMiiInfo(mkw::Net::USERPacket* packet)
+void ClearUserMiiInfo(mkw::Net::UserHandler::Packet* packet)
 {
     // Clear hidden Mii info
     // Mii Group count _should_ be 2, but could be higher if the code has been
@@ -84,6 +85,11 @@ void ClearUSERMiiInfo(mkw::Net::USERPacket* packet)
     for (u32 i = 0; i < packet->miiGroupCount; i++) {
         ClearMiiInfo(&packet->miiData[i]);
     }
+
+    // Send Mii data to the server
+    wwfc::GPReport::ReportB64Encode(
+        "mkw_user", packet, sizeof(mkw::Net::UserHandler::Packet)
+    );
 }
 
 #endif

@@ -27,14 +27,10 @@
 
 #ifndef NEEDS_IBAT_CONFIG
 
-// #if ST7PD00 | ST7ED00 | ST7JD00 | ADDRESS_PES_ALLOC_FUNCTION | DWEPD00 |       \
-//     RWEED00 | RWEJD00 | RWEPD00 | R2WED00 | R2WJD00 | R2WPD00 | R2WXD00 |      \
-//     RENED00 | RENJD00 | RENPD00 | SNCED00 | SNCJD00 | SNCPD00
-
 // Actually just blacklist known working games
 #if RMCED00 | RMCJD00 | RMCKD00 | RMCPD00 | \
     RSBED01 | RSBED02 | RSBJD00 | RSBJD01 | RSBPD00 | RSBPD01 | \
-    RTYPD00 | WASJN0001
+    RTYPD00 | R4QED01 | R4QJD00 | R4QPD01 | R4QPD02 | WASJN0001
 #  define NEEDS_IBAT_CONFIG 0
 #else
 #  define NEEDS_IBAT_CONFIG 1
@@ -61,13 +57,12 @@ GCT_STRING(ADDRESS_DWC_AUTH_ADD_CSNUM, AuthStage0Code) // 0x800EE098
 #endif
     // Hook at 0x800EE3AC (DWCi_Auth_HandleResponse, just after NHTTPGetBodyAll call)
 
-#if ADDRESS_HBM_ALLOCATOR
-#  if R7EPD00 || R7EED00 || R7EJD00
+#if R7EPD00 || R7EED00 || R7EJD00
     // NiGHTS: Journey of Dreams doesn't have the HBM heap at all times
     // These addresses are region-independent, much like other SEGA games
     /* 0x04 */ HD(GCT_STRING_PTR_LWZU, r0, r31, LD_Stage1ParamBlock)
     /* 0x0C */ cmplwi  r0, 0
-    /* 0x10 */ bne-    L_GHAllocDone
+    /* 0x10 */ bne-    L_AllocDone
 
     /* 0x14 */ lis     r3, 0x805BA418@h
     /* 0x18 */ ori     r3, r3, 0x805BA418@l
@@ -79,17 +74,40 @@ GCT_STRING(ADDRESS_DWC_AUTH_ADD_CSNUM, AuthStage0Code) // 0x800EE098
     // Adjust offsets from this point:
     // 0x0C -> 0x2C
     // 0x58 -> 0x78
-#  else
-    // Normal routine, executed if the HBM allocator is used
-    /* 0x04 */ HD(GCT_STRING_PTR, r31, LD_Stage1ParamBlock)
-#  endif
+#elif RMKED00 || RMKJD00 || RMKPD00
+    // Mario Sports Mix allocates HBM at game start, but recreates the heap
+    // everytime HBM is opened
+    // Instead of allocating more memory, let's just truncate the HBM heap
+    /* 0x04 */ lwz     r3, -0x6F98(r13) # HBM data (-0x10)
+    /* 0x08 */ lis     r0, 0x60000@h
+    /* 0x0C */ stw     r0, 0x10 + 0x2C(r3) # Heap size
+    /* 0x10 */ lwz     r3, 0x10 + 0x10(r3) # Heap pointer
+    /* 0x14 */ add     r3, r3, r0
+    /* 0x18 */ HD(GCT_STRING_PTR_STWU, r3, r31, LD_Stage1ParamBlock)
+    // Adjust offsets from this point:
+    // 0x0C -> 0x20
+    // 0x58 -> 0x6C
+#elif R4QED01 | R4QJD00 | R4QKD00 | R4QPD01 | R4QPD02
+    // Mario Strikers Charged works the same way as Mario Sports Mix
+#if R4QKD00
+    /* 0x04 */ lwz     r3, -0x1B90(r13) # HBM data (-0x4)
 #else
+    /* 0x04 */ lwz     r3, -0x1AE8(r13) # HBM data (-0x4)
+#endif
+    /* 0x08 */ lis     r0, 0x60000@h
+    /* 0x0C */ stw     r0, 0x4 + 0x2C(r3) # Heap size
+    /* 0x10 */ lwz     r3, 0x4 + 0x10(r3) # Heap pointer
+    /* 0x14 */ add     r3, r3, r0
+    /* 0x18 */ HD(GCT_STRING_PTR_STWU, r3, r31, LD_Stage1ParamBlock)
+    // Adjust offsets from this point:
+    // 0x0C -> 0x20
+    // 0x58 -> 0x6C
+#elif ADDRESS_GH_ALLOC_FUNCTION
+    // Guitar Hero games
     /* 0x04 */ HD(GCT_STRING_PTR_LWZU, r0, r31, LD_Stage1ParamBlock)
     /* 0x0C */ cmplwi  r0, 0
     /* 0x10 */ bne-    L_AllocDone
 
-#  if ADDRESS_GH_ALLOC_FUNCTION
-    // Guitar Hero games
     /* 0x14 */ lis     r3, 0x20000@h
     /* 0x18 */ HC(GCT_STRING_BL_CALL, ADDRESS_GH_ALLOC_FUNCTION)
     /* 0x1C */ stw     r3, 0(r31)
@@ -97,8 +115,12 @@ GCT_STRING(ADDRESS_DWC_AUTH_ADD_CSNUM, AuthStage0Code) // 0x800EE098
     // Adjust offsets from this point:
     // 0x0C -> 0x20
     // 0x58 -> 0x6C
-#  elif ADDRESS_PES_ALLOC_FUNCTION
+#elif ADDRESS_PES_ALLOC_FUNCTION
     // Pro Evolution Soccer games
+    /* 0x04 */ HD(GCT_STRING_PTR_LWZU, r0, r31, LD_Stage1ParamBlock)
+    /* 0x0C */ cmplwi  r0, 0
+    /* 0x10 */ bne-    L_AllocDone
+
     /* 0x14 */ li      r3, 1
     /* 0x18 */ lis     r4, 0x20000@h
     /* 0x1C */ HC(GCT_STRING_BL_CALL, ADDRESS_PES_ALLOC_FUNCTION)
@@ -107,7 +129,10 @@ GCT_STRING(ADDRESS_DWC_AUTH_ADD_CSNUM, AuthStage0Code) // 0x800EE098
     // Adjust offsets from this point:
     // 0x0C -> 0x24
     // 0x58 -> 0x70
-#  else
+#else
+    // Normal routine, executed if the HBM allocator is used
+    /* 0x04 */ HD(GCT_STRING_PTR, r31, LD_Stage1ParamBlock)
+#  if !ADDRESS_HBM_ALLOCATOR
 #    error Missing HBM allocator
 #  endif
 #endif
@@ -167,6 +192,15 @@ L_HashMatched:
 
     // Leave the auth function
     /* 0x54 */ HC(GCT_STRING_B_CALL, ADDRESS_AUTH_HANDLERESP_OUT) // 0x800EEB54
+
+L_CustomAllocator:
+#if WUNEN0005
+    /* 0x58 */ .long   0x804F9D84
+#elif WUNJN0002
+    /* 0x58 */ .long   0x804FCF24
+#elif WUNPN0002
+    /* 0x58 */ .long   0x804FD224
+#endif
 GCT_STRING_END(AuthStage0Code)
 
 
@@ -186,7 +220,11 @@ LD_Stage1ParamBlock:
     /* 0x2C */ .long   ADDRESS_NHTTPCreateRequest // NHTTPCreateRequest (0x801D8FF8)
     /* 0x30 */ .long   ADDRESS_NHTTPSendRequestAsync // NHTTPSendRequestAsync (0x801D925C)
     /* 0x34 */ .long   ADDRESS_NHTTPDestroyResponse // NHTTPDestroyResponse (0x801D92F8)
+#if WUNEN0005 || WUNJN0002 || WUNPN0002
+    /* 0x38 */ .long   ADDRESS_DWC_AUTH_ADD_CSNUM + (L_CustomAllocator - AuthStage0Code) // allocator (custom)
+#else
     /* 0x38 */ .long   ADDRESS_HBM_ALLOCATOR // allocator (0x8028ADE4)
+#endif
     /* 0x3C */ .long   ADDRESS_DWC_ERROR // dwc_error (0x802F1CB8)
             // .ascii  "RMCPD00\0\0"
     /* 0x40 */ .ascii  PAYLOAD
@@ -219,6 +257,14 @@ GCT_WRITE_BRANCH(ADDRESS_AUTH_HANDLERESP_HOOK, ADDRESS_DWC_AUTH_ADD_CSNUM + 0x4)
 
 // Skip DNS cache since the URLs aren't patched by this point
 GCT_WRITE_BRANCH(ADDRESS_SKIP_DNS_CACHE, ADDRESS_SKIP_DNS_CACHE_CONTINUE) // 0x800D1518, 0x800D170C
+
+
+// Pokemon Battle Revolution and Mario Strikers Charged don't align the HTTP response buffer
+// like how we need it to be
+#if RPBED00 | RPBPD00 | R4QED01 | R4QJD00 | R4QPD01 | R4QPD02
+GCT_WRITE_INSTR(ADDRESS_DWCi_Auth_SendRequest + 0x4C, addi r5, r6, 0x41C6)
+GCT_WRITE_INSTR(ADDRESS_DWCi_Auth_SendRequest + 0x58, li r6, 0x1000 - 3)
+#endif
 
 
 GCT_ENDIF(1)

@@ -1,6 +1,7 @@
 #include "import/dwc.h"
 #include "import/gamespy.h"
 #include "import/revolution.h"
+#include "wwfcHostPlatform.hpp"
 #include "wwfcLog.hpp"
 #include "wwfcPatch.hpp"
 #include "wwfcPayload.hpp"
@@ -31,9 +32,7 @@ static bool g_sendExLogin = false;
 
 void Init()
 {
-    if (DWC::stpFriendCnt != nullptr) {
-        // If the friend context already exists when the payload is initialized,
-        // then the extended login parameters wouldn't have been sent on login.
+    if (DWC::stpLoginCnt != nullptr && DWC::stpLoginCnt->state == 5) {
         g_sendExLogin = true;
     }
 }
@@ -100,6 +99,18 @@ void SendExtendedLogin(
 {
     g_sendExLogin = false;
 
+    if (sendProfileId) {
+        DWC::DWCUserData* userData = DWC::DWCi_GetUserData();
+        if (userData != nullptr && userData->profileId != 0) {
+            GameSpy::gpiAppendStringToBuffer(
+                connection, outputBuffer, "\\profileid\\"
+            );
+            GameSpy::gpiAppendIntToBuffer(
+                connection, outputBuffer, userData->profileId
+            );
+        }
+    }
+
     GameSpy::gpiAppendStringToBuffer(
         connection, outputBuffer, "\\payload_ver\\"
     );
@@ -117,17 +128,11 @@ void SendExtendedLogin(
         }
     }
 
-    if (sendProfileId) {
-        DWC::DWCUserData* userData = DWC::DWCi_GetUserData();
-        if (userData != nullptr && userData->profileId != 0) {
-            GameSpy::gpiAppendStringToBuffer(
-                connection, outputBuffer, "\\profileid\\"
-            );
-            GameSpy::gpiAppendIntToBuffer(
-                connection, outputBuffer, userData->profileId
-            );
-        }
-    }
+    // TODO: Add more detailed information
+    GameSpy::gpiAppendStringToBuffer(connection, outputBuffer, "\\wwfc_host\\");
+    GameSpy::gpiAppendStringToBuffer(
+        connection, outputBuffer, HostPlatform::IsDolphin() ? "Dolphin" : "Wii"
+    );
 
     GameSpy::gpiAppendStringToBuffer(connection, outputBuffer, "\\final\\");
 }
@@ -136,17 +141,17 @@ static u64 DecodeUintString(const char* str, u32 bitCount)
 {
     u64 value = 0;
 
-    for (int i = 0; i < (bitCount >> 2); i++) {
+    for (u32 n = 0; n < (bitCount >> 2); n++) {
         u8 nybble = 0;
-        if (str[i] >= '0' && str[i] <= '9') {
-            nybble = str[i] - '0';
-        } else if (str[i] >= 'a' && str[i] <= 'f') {
-            nybble = (str[i] - 'a') + 0xA;
+        if (str[n] >= '0' && str[n] <= '9') {
+            nybble = str[n] - '0';
+        } else if (str[n] >= 'a' && str[n] <= 'f') {
+            nybble = (str[n] - 'a') + 0xA;
         } else {
             return 0;
         }
 
-        value |= u64(nybble) << ((bitCount - 4) - i * 4);
+        value |= u64(nybble) << ((bitCount - 4) - n * 4);
     }
 
     return value;
@@ -297,8 +302,9 @@ static void SendAuthTokenSignature(
     s32 b64Len = DWC::DWC_Base64Encode(
         &authSig, sizeof(authSig), b64AuthSig, sizeof(b64AuthSig)
     );
-    if (b64Len < 0 || b64Len >= 0x400) {
-        LOG_ERROR("Could not base64 encode the signature");
+    if (b64Len == -1 || b64Len == sizeof(b64AuthSig)) {
+        LOG_ERROR("Could not fit the base64-encoded signature into the "
+                  "provided buffer!");
         return;
     }
 
@@ -314,7 +320,7 @@ static void SendAuthTokenSignature(
 // Always check if the SAKE server has the latest friend info, as it can get
 // outdated when switching between servers (such as Wiimmfi)
 WWFC_DEFINE_PATCH = {Patch::WriteASM(
-    WWFC_PATCH_LEVEL_CRITICAL, //
+    WWFC_PATCH_LEVEL_SUPPORT | WWFC_PATCH_LEVEL_BUGFIX, //
     RMCXD_PORT(0x80672FCC, 0x8066B868, 0x80672638, 0x80661324), //
     1, ASM_LAMBDA(b 0x70)
 )};
@@ -325,9 +331,22 @@ WWFC_DEFINE_PATCH = {Patch::WriteASM(
 
 // Same patch as above but for the Mario Kart Channel
 WWFC_DEFINE_PATCH = {Patch::WriteASM(
-    WWFC_PATCH_LEVEL_CRITICAL, //
+    WWFC_PATCH_LEVEL_SUPPORT | WWFC_PATCH_LEVEL_BUGFIX, //
     RMCXN_PORT(0x801FD08C, 0x801FCFEC, 0x801FCE24, 0x801FD87C), //
     1, ASM_LAMBDA(b 0x6C)
+)};
+
+#endif
+
+#if RMC
+
+// Remove the needless wait during the login friend process. It doesn't seem to
+// make a difference now due to the fast way we handle friend authorization.
+// TODO: This could apply to other games as well
+WWFC_DEFINE_PATCH = {Patch::WriteASM(
+    WWFC_PATCH_LEVEL_SUPPORT, //
+    RMCXD_PORT(0x800CE710, 0x800CE670, 0x800CE630, 0x800CE770), //
+    1, ASM_LAMBDA(nop)
 )};
 
 #endif

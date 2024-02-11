@@ -76,14 +76,14 @@ jobs:
                   path: ./misc/private-key-dev.pem
     package:
         name: Package
-        needs: [payload, stage1]
+        needs: [exploit, payload, stage1]
         runs-on: ubuntu-latest
         container: devkitpro/devkitppc:latest
         steps:
             - uses: actions/download-artifact@v4.1.0
               with:
                   name: exploit
-                  path: ./payload/binary/sbcm
+                  path: ./payload/sbcm
             - uses: actions/download-artifact@v4.1.0
               with:
                   name: payload

@@ -1,7 +1,10 @@
+#include "wwfcLibC.hpp"
 #include <algorithm>
 #include <ctype.h>
 #include <string.h>
 #include <wwfcCommon.h>
+
+extern "C" {
 
 int tolower(int c)
 {
@@ -141,4 +144,25 @@ char* strncpy(char* __restrict dst, const char* __restrict src, size_t n)
     }
 
     return (char*) memcpy(dst, src, std::min<size_t>(strlen(src) + 1, n));
+}
+
+int atexit(void (*__func)(void))
+{
+    return 1;
+}
+
+int __cxa_guard_acquire(long long int* guard)
+{
+    return !(*guard);
+}
+
+void __cxa_guard_release(long long int* guard)
+{
+    *guard = 1;
+}
+
+void __cxa_guard_abort(long long int* guard)
+{
+    *guard = 0;
+}
 }

@@ -1,3 +1,4 @@
+#include "import/eggException.hpp"
 #include "wwfcLogin.hpp"
 #include "wwfcPatch.hpp"
 #include "wwfcSupport.hpp"
@@ -48,7 +49,7 @@ const wwfc_payload Header = {
             .format_version = 1,
             .format_version_compat = 1,
             .name = PAYLOAD_NAME,
-            .version = 1,
+            .version = 4,
             .got_start = u32(&GOTStart),
             .got_end = u32(&GOTEnd),
             .fixup_start = u32(&FixupStart),
@@ -115,8 +116,8 @@ static void CallCtors(const wwfc_payload* const payload)
             continue;
         }
 
-        ctor = (decltype(ctor)) (reinterpret_cast<const char*>(payload) +
-                                 ctorOffset);
+        ctor = (decltype(ctor)
+        ) (reinterpret_cast<const char*>(payload) + ctorOffset);
         (*ctor)();
     }
 }
@@ -133,10 +134,17 @@ s32 EntryAfterGOT(wwfc_payload* payload)
         return WL_ERROR_PAYLOAD_GAME_MISMATCH;
     }
 
+    // Check that the disc version matches
+    // Don't check for Brawl US or JP because they are identical except for one
+    // byte
+#  if !RSBED01 && !RSBED02 && !RSBJD00 && !RSBJD01
     if (g_LoMem.discVersion != TITLE_VERSION) {
         return WL_ERROR_PAYLOAD_GAME_MISMATCH;
     }
+#  endif
 #endif
+
+    EGG::Exception::SetUserCallBack(nullptr);
 
     CallCtors(payload);
 

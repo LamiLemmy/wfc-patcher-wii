@@ -1,5 +1,6 @@
 #pragma once
 
+#include "gamespy.h"
 #include <wwfcUtil.h>
 
 #ifdef __cplusplus
@@ -27,7 +28,9 @@ typedef struct {
     /* 0x1CC / 0x802F1E74 */ u32 unk_0x1CC;
 } DWCAuthResult;
 
+#ifdef __cplusplus
 static_assert(sizeof(DWCAuthResult) == 0x1D0);
+#endif
 
 typedef struct {
     /* 0x000 / 0x802F1E88 */ u32 statusData;
@@ -35,18 +38,60 @@ typedef struct {
     /* 0x045 / 0x802F1ECD */ char serviceToken[0x12F];
 } DWCSvcLocResult;
 
+#ifdef __cplusplus
 static_assert(sizeof(DWCSvcLocResult) == 0x174);
+#endif
 
 typedef struct {
     /* 0x000 / 0x802F2000 */ char prWords[0x34];
     /* 0x034 / 0x802F2034 */ s32 result;
 } DWCProfResult;
 
+#ifdef __cplusplus
 static_assert(sizeof(DWCProfResult) == 0x38);
+#endif
 
 extern DWCAuthResult s_auth_result AT(ADDRESS_AUTH_RESULT);
 extern DWCSvcLocResult s_svl_result AT(ADDRESS_AUTH_RESULT + 0x1D0);
 extern DWCProfResult s_prof_result AT(ADDRESS_AUTH_RESULT + 0x1D0 + 0x178);
+
+// 0x803862D0
+extern void* stpFriendCnt AT(ADDRESS_stpFriendCnt);
+
+typedef struct {
+    /* 0x0 */ u32 pad_0x0;
+    /* 0x4 */ u32 state;
+} DWCLoginContext;
+
+// 0x803862E8
+extern DWCLoginContext* stpLoginCnt AT(ADDRESS_stpLoginCnt);
+
+#if RMC
+
+LONGCALL int DWC_CloseConnectionHard(u8 playerAid)
+    AT(RMCXD_PORT(0x800D2000, 0x800D1F60, 0x800D1F20, 0x800D2060));
+
+typedef struct {
+    /* 0x00 */ u32 profileId;
+    /* 0x04 */ u8 _04[0x30 - 0x04];
+} DWCiNodeInfo;
+
+#  ifdef __cplusplus
+static_assert(sizeof(DWCiNodeInfo) == 0x30);
+#  endif
+
+LONGCALL DWCiNodeInfo* DWCi_NodeInfoList_GetNodeInfoForAid(u8 playerAid)
+    AT(RMCXD_PORT(0x800E7EE0, 0x800E7E40, 0x800E7E00, 0x800E7F40));
+
+typedef struct {
+    /* 0x0 */ GameSpy::GPConnection* connection;
+} DWCMatchContext;
+
+// 0x8038630C
+extern DWCMatchContext*
+    stpMatchCnt AT(RMCXD_PORT(0x8038630C, 0x80381F8C, 0x80385C8C, 0x8037432C));
+
+#endif
 
 LONGCALL DWCUserData* DWCi_GetUserData( //
     void
@@ -55,8 +100,6 @@ LONGCALL DWCUserData* DWCi_GetUserData( //
 LONGCALL s32 DWC_Base64Encode( //
     const void* in, u32 inSize, char* out, u32 outMaxSize
 ) AT(ADDRESS_DWC_Base64Encode);
-
-extern void* stpFriendCnt AT(ADDRESS_stpFriendCnt);
 
 #ifdef __cplusplus
 }

@@ -71,7 +71,7 @@ jobs:
                   path: ./patch/build/*.txt
     package:
         name: Package
-        needs: [payload, stage1]
+        needs: [exploit, payload, stage1]
         runs-on: ubuntu-latest
         container: devkitpro/devkitppc:latest
         steps:
