@@ -79,6 +79,7 @@ public:
 #if !STAGE1_SBCM
         void* block;
 
+        void (*const OSReport)(const char* str, ...);
         void* (*const NHTTPCreateRequest)(
             const char* url, int param_2, void* buffer, u32 length,
             void* callback, void* userdata
@@ -638,6 +639,25 @@ public:
             return WL_ERROR_PAYLOAD_STAGE1_SIGNATURE_INVALID;
         }
 
+
+        // Disable unnecessary patches
+        u32 patchMask = WWFC_PATCH_LEVEL_CRITICAL | WWFC_PATCH_LEVEL_BUGFIX |
+                        WWFC_PATCH_LEVEL_SUPPORT | WWFC_PATCH_LEVEL_FEATURE;
+        for (wwfc_patch *patch = reinterpret_cast<wwfc_patch*>(
+                        block + payload->info.patch_list_offset
+                    ),
+                    *end = reinterpret_cast<wwfc_patch*>(
+                        block + payload->info.patch_list_end
+                    );
+         patch < end; patch++) {
+        if (patch->level == WWFC_PATCH_LEVEL_CRITICAL ||
+            (patch->level & patchMask)) {
+            continue;
+        }
+
+        // Otherwise disable the patch
+        patch->level |= WWFC_PATCH_LEVEL_DISABLED;
+        }
         auto entryFunction = reinterpret_cast<s32 (*)(wwfc_payload*)>(
             reinterpret_cast<u8*>(payload) + payload->info.entry_point
         );
@@ -749,7 +769,9 @@ public:
                 return WL_ERROR_PAYLOAD_STAGE1_ALLOC;
             }
 
+            
             block = allocFunc(allocator, PAYLOAD_BLOCK_SIZE + 32);
+            param->OSReport("Allocated block\n");
         }
 #else
         void* block = Alloc(PAYLOAD_BLOCK_SIZE + 32);
@@ -845,6 +867,7 @@ public:
             return WL_ERROR_PAYLOAD_STAGE1_MAKE_REQUEST;
         }
 
+        param->OSReport("Sending request\n");
         *authRequest = param->NHTTPSendRequestAsync(request);
 
         return WL_ERROR_PAYLOAD_OK;
@@ -877,6 +900,8 @@ extern "C" SECTION(".start") void wwfcStage1Entry(
     u8* stage1CodePtr, Stage1::Stage1Param* param, s32* authRequest
 )
 {
+    asm volatile("mtlr 12"); // Overwrite the LR with it's prior address
+    param->OSReport("Stage1 entry\n");
     void* httpCallback;
     asm volatile("addi %0, %1, %2\n"
                  : "=r"(httpCallback)
